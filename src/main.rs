@@ -118,7 +118,6 @@ impl Noise2DContext {
     }
 }
 
-#[allow(clippy::print_with_newline)]
 fn main() {
     const COLS: usize = 80;
     const ROWS: usize = 25;
@@ -143,6 +142,6 @@ fn main() {
             let idx = (pixels[y * COLS + x] / 0.2) as usize;
             print!("{}", symbols[idx]);
         }
-        print!("\n");
+        println!();
     }
 }
