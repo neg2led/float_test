@@ -62,8 +62,8 @@ impl Noise2DContext {
         permutations.shuffle(&mut rng);
 
         Noise2DContext {
-            rgradients: rgradients,
-            permutations: permutations,
+            rgradients,
+            permutations,
         }
     }
 
@@ -100,7 +100,7 @@ impl Noise2DContext {
     }
 
     fn get(&self, x: f32, y: f32) -> f32 {
-        let p = Vec2 { x: x, y: y };
+        let p = Vec2 { x, y };
         let (gradients, origins) = self.get_gradients(x, y);
 
         let v0 = gradient(origins[0], gradients[0], p);
@@ -117,6 +117,7 @@ impl Noise2DContext {
     }
 }
 
+#[allow(clippy::print_with_newline)]
 fn main() {
     let symbols = [' ', '░', '▒', '▓', '█', '█'];
     let mut pixels = [0f32; 256 * 256];
