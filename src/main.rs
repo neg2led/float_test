@@ -13,6 +13,7 @@
 
 use rand::seq::SliceRandom;
 use rand::{thread_rng, Rng};
+use std::env::consts::{ARCH, OS};
 use std::f32::consts::PI;
 
 #[derive(Copy, Clone)]
@@ -119,22 +120,27 @@ impl Noise2DContext {
 
 #[allow(clippy::print_with_newline)]
 fn main() {
+    const COLS: usize = 80;
+    const ROWS: usize = 25;
+
     let symbols = [' ', '░', '▒', '▓', '█', '█'];
-    let mut pixels = [0f32; 256 * 256];
+    let mut pixels = [0f32; ROWS * COLS];
     let n2d = Noise2DContext::new();
 
+    println!("running on {} {}", OS, ARCH);
+
     for _ in 0..100 {
-        for y in 0..256 {
-            for x in 0..256 {
+        for y in 0..ROWS {
+            for x in 0..COLS {
                 let v = n2d.get(x as f32 * 0.1, y as f32 * 0.1);
-                pixels[y * 256 + x] = v * 0.5 + 0.5;
+                pixels[y * COLS + x] = v * 0.5 + 0.5;
             }
         }
     }
 
-    for y in 0..256 {
-        for x in 0..256 {
-            let idx = (pixels[y * 256 + x] / 0.2) as usize;
+    for y in 0..ROWS {
+        for x in 0..COLS {
+            let idx = (pixels[y * COLS + x] / 0.2) as usize;
             print!("{}", symbols[idx]);
         }
         print!("\n");
