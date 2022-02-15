@@ -7,8 +7,10 @@
 // Multi-language Perlin noise benchmark.
 // See https://github.com/nsf/pnoise for timings and alternative implementations.
 
+use crossterm::terminal::size;
 use rand::seq::SliceRandom;
 use rand::{thread_rng, Rng};
+use std::cmp;
 use std::env::consts::{ARCH, OS};
 use std::f32::consts::PI;
 
@@ -115,29 +117,40 @@ impl Noise2DContext {
 }
 
 fn main() {
-    const COLS: usize = 80;
-    const ROWS: usize = 25;
-
+    const GRID: usize = 256;
+    let mut pixels = [0f32; GRID * GRID];
     let symbols = [' ', '░', '▒', '▓', '█', '█'];
-    let mut pixels = [0f32; ROWS * COLS];
+
+    // get current terminal dimensions
+    let (term_cols, term_rows) = size().unwrap_or((80, 25));
+
+    // clamp to max pixel grid
+    let print_cols: usize = cmp::min(usize::from(term_cols), 256);
+    let print_rows: usize = cmp::min(usize::from(term_rows), 256);
+
+    // print some info
+    println!(
+        "running in a {}x{} terminal on {} {}",
+        term_cols, term_rows, OS, ARCH
+    );
+
+    // actual execution.
     let n2d = Noise2DContext::new();
-
-    println!("running on {} {}", OS, ARCH);
-
     for _ in 0..100 {
-        for y in 0..ROWS {
-            for x in 0..COLS {
+        for y in 0..GRID {
+            for x in 0..GRID {
                 let v = n2d.get(x as f32 * 0.1, y as f32 * 0.1);
-                pixels[y * COLS + x] = v * 0.5 + 0.5;
+                pixels[y * GRID + x] = v * 0.5 + 0.5;
             }
         }
     }
 
-    for y in 0..ROWS {
-        for x in 0..COLS {
-            let idx = (pixels[y * COLS + x] / 0.2) as usize;
+    for y in 0..print_rows {
+        for x in 0..print_cols {
+            let idx = (pixels[y * GRID + x] / 0.2) as usize;
             print!("{}", symbols[idx]);
         }
         println!();
     }
+    println!("printed {}x{} characters", print_cols, print_rows);
 }
