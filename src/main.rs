@@ -67,8 +67,8 @@ fn val_to_char(value: u8) -> char {
 fn main() {
     let termsize: (u16, u16) = terminal::size().unwrap_or((80, 25));
 
-    let cols = cmp::min(cmp::max(termsize.0 as usize, 64), 128);
-    let rows = cmp::min(cmp::max(termsize.1 as usize, 64), 128);
+    let cols = cmp::min(cmp::max(termsize.0 as usize, 80), 128);
+    let rows = cmp::min(cmp::max(termsize.1 as usize, 40), 128);
     let aspect = rows as f64 / cols as f64;
 
     println!(
