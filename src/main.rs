@@ -1,156 +1,93 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: GPL-2.0 OR MIT
 //
-// Copyright 2014 The Rust Project Developers
-// Modifications Copyright 2022 Andrew Powers-Holmes <aholmes@omnom.net>
+// Copyright 2022 Andrew Powers-Holmes <aholmes@omnom.net>
 //
+// Simple little rust program to do some cute ASCII mandelbrot stuff.
+// Created to test compilation and execution of floating-point Rust code
+// in the OpenWrt build environment.
 
-// Multi-language Perlin noise benchmark.
-// See https://github.com/nsf/pnoise for timings and alternative implementations.
-
-use crossterm::terminal::size;
-use rand::seq::SliceRandom;
-use rand::{thread_rng, Rng};
+use crossterm::terminal;
+use num::complex::Complex;
 use std::cmp;
 use std::env::consts::{ARCH, OS};
-use std::f32::consts::PI;
 
-#[derive(Copy, Clone)]
-struct Vec2 {
-    x: f32,
-    y: f32,
+struct Ifs {
+    max_iter: u64,
 }
 
-fn lerp(a: f32, b: f32, v: f32) -> f32 {
-    a * (1.0 - v) + b * v
+trait Dds<State> {
+    fn cont(&self, z: State) -> bool;
+    fn next(&self, z: State, c: State) -> State;
 }
 
-fn smooth(v: f32) -> f32 {
-    v * v * (3.0 - 2.0 * v)
-}
+impl Dds<Complex<f64>> for Ifs {
+    fn cont(&self, z: Complex<f64>) -> bool {
+        z.norm_sqr() <= 4.0
+    }
 
-fn random_gradient<R: Rng>(r: &mut R) -> Vec2 {
-    let v = PI * 2.0 * r.gen::<f32>();
-    Vec2 {
-        x: v.cos(),
-        y: v.sin(),
+    fn next(&self, z: Complex<f64>, c: Complex<f64>) -> Complex<f64> {
+        z * z + c
     }
 }
 
-fn gradient(orig: Vec2, grad: Vec2, p: Vec2) -> f32 {
-    (p.x - orig.x) * grad.x + (p.y - orig.y) * grad.y
+impl Ifs {
+    pub fn new(max_iter: u64) -> Self {
+        Self { max_iter }
+    }
+
+    pub fn iter(&self, c: Complex<f64>) -> u64 {
+        let mut i: u64 = 0;
+        let mut z = c;
+        while i < self.max_iter && self.cont(z) {
+            z = self.next(z, c);
+            i += 1;
+        }
+        if i < self.max_iter {
+            return self.max_iter - i;
+        }
+        0
+    }
 }
 
-struct Noise2DContext {
-    rgradients: [Vec2; 256],
-    permutations: [i32; 256],
-}
+fn val_to_char(value: u8) -> char {
+    // changes an intensity into an ascii character
+    let chars = ['@', '%', '#', '*', '+', '=', '~', ':', '.', ' '];
 
-impl Noise2DContext {
-    fn new() -> Noise2DContext {
-        let mut rng = thread_rng();
+    let num_chars: u8 = chars.len() as u8;
+    let step: u8 = (255 / num_chars) as u8;
 
-        let mut rgradients = [Vec2 { x: 0.0, y: 0.0 }; 256];
-        for x in &mut rgradients[..] {
-            *x = random_gradient(&mut rng);
-        }
-
-        let mut permutations = [0; 256];
-        for (i, x) in permutations.iter_mut().enumerate() {
-            *x = i as i32;
-        }
-        permutations.shuffle(&mut rng);
-
-        Noise2DContext {
-            rgradients,
-            permutations,
+    for i in 0..(num_chars - 1) {
+        if value >= i * step && value < (i + 1) * step {
+            return chars[i as usize];
         }
     }
-
-    fn get_gradient(&self, x: i32, y: i32) -> Vec2 {
-        let idx = self.permutations[(x & 255) as usize] + self.permutations[(y & 255) as usize];
-        self.rgradients[(idx & 255) as usize]
-    }
-
-    fn get_gradients(&self, x: f32, y: f32) -> ([Vec2; 4], [Vec2; 4]) {
-        let x0f = x.floor();
-        let y0f = y.floor();
-        let x1f = x0f + 1.0;
-        let y1f = y0f + 1.0;
-
-        let x0 = x0f as i32;
-        let y0 = y0f as i32;
-        let x1 = x0 + 1;
-        let y1 = y0 + 1;
-
-        (
-            [
-                self.get_gradient(x0, y0),
-                self.get_gradient(x1, y0),
-                self.get_gradient(x0, y1),
-                self.get_gradient(x1, y1),
-            ],
-            [
-                Vec2 { x: x0f, y: y0f },
-                Vec2 { x: x1f, y: y0f },
-                Vec2 { x: x0f, y: y1f },
-                Vec2 { x: x1f, y: y1f },
-            ],
-        )
-    }
-
-    fn get(&self, x: f32, y: f32) -> f32 {
-        let p = Vec2 { x, y };
-        let (gradients, origins) = self.get_gradients(x, y);
-
-        let v0 = gradient(origins[0], gradients[0], p);
-        let v1 = gradient(origins[1], gradients[1], p);
-        let v2 = gradient(origins[2], gradients[2], p);
-        let v3 = gradient(origins[3], gradients[3], p);
-
-        let fx = smooth(x - origins[0].x);
-        let vx0 = lerp(v0, v1, fx);
-        let vx1 = lerp(v2, v3, fx);
-        let fy = smooth(y - origins[0].y);
-
-        lerp(vx0, vx1, fy)
-    }
+    chars[(num_chars - 1) as usize]
 }
 
 fn main() {
-    const GRID: usize = 256;
-    let mut pixels = [0f32; GRID * GRID];
-    let symbols = [' ', '░', '▒', '▓', '█', '█'];
+    let termsize: (u16, u16) = terminal::size().unwrap_or((80, 25));
 
-    // get current terminal dimensions
-    let (term_cols, term_rows) = size().unwrap_or((80, 25));
+    let cols = cmp::min(cmp::max(termsize.0 as usize, 64), 128);
+    let rows = cmp::min(cmp::max(termsize.1 as usize, 64), 128);
+    let aspect = rows as f64 / cols as f64;
 
-    // clamp to max pixel grid
-    let print_cols: usize = cmp::min(usize::from(term_cols), 256);
-    let print_rows: usize = cmp::min(usize::from(term_rows), 256);
-
-    // print some info
     println!(
-        "running in a {}x{} terminal on {} {}",
-        term_cols, term_rows, OS, ARCH
+        "running on {} {} with {}x{} terminal, aspect ratio {}",
+        OS, ARCH, termsize.0, termsize.1, aspect
     );
 
-    // actual execution.
-    let n2d = Noise2DContext::new();
-    for _ in 0..100 {
-        for y in 0..GRID {
-            for x in 0..GRID {
-                let v = n2d.get(x as f32 * 0.1, y as f32 * 0.1);
-                pixels[y * GRID + x] = v * 0.5 + 0.5;
-            }
-        }
-    }
+    let min = Complex::new(-1.4, -1.0);
+    let max = Complex::new(0.6, 1.0);
+    let mandel = Ifs::new(256);
 
-    for y in 0..print_rows {
-        for x in 0..print_cols {
-            let idx = (pixels[y * GRID + x] / 0.2) as usize;
-            print!("{}", symbols[idx]);
+    for row in 0..rows {
+        for col in 0..cols {
+            let x = min.re + (max.re - min.re) * (col as f64) / (cols as f64);
+            let y = min.im + (max.im - min.im) * (row as f64) / (rows as f64);
+            let c = Complex::new(x, y);
+            let m = mandel.iter(c) as u8;
+            print!("{}", val_to_char(m));
         }
         println!();
     }
-    println!("printed {}x{} characters", print_cols, print_rows);
 }
