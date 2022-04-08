@@ -1,4 +1,4 @@
-name: Build & Test
+name: Build
 
 on:
   workflow_dispatch:
@@ -50,4 +50,4 @@ jobs:
         with:
           use-cross: true
           command: build
-          args: --release
+          args: --target ${{ matrix.target }} --release
